@@ -906,9 +906,12 @@ zend_module_entry oci8_module_entry = {
 
 /* {{{ PHP_INI */
 PHP_INI_BEGIN()
-	STD_PHP_INI_ENTRY(	"oci8.max_persistent",			"-1",	PHP_INI_SYSTEM,	OnUpdateLong,	max_persistent,			zend_oci_globals,	oci_globals)
-	STD_PHP_INI_ENTRY(	"oci8.persistent_timeout",		"-1",	PHP_INI_SYSTEM,	OnUpdateLong,	persistent_timeout,		zend_oci_globals,	oci_globals)
-	STD_PHP_INI_ENTRY(	"oci8.ping_interval",			"60",	PHP_INI_SYSTEM,	OnUpdateLong,	ping_interval,			zend_oci_globals,	oci_globals)
+	STD_PHP_INI_BOOLEAN("oci8.debug_sql_enable",	"0",	PHP_INI_SYSTEM,	OnUpdateBool,	debug_sql_enable,			zend_oci_globals,	oci_globals)
+	STD_PHP_INI_ENTRY(	"oci8.debug_sql_udp_host",	"127.0.0.1",	PHP_INI_SYSTEM,	OnUpdateString,	debug_sql_udp_host,			zend_oci_globals,	oci_globals)
+	STD_PHP_INI_ENTRY(	"oci8.debug_sql_udp_port",	"7778",	PHP_INI_SYSTEM,	OnUpdateLong,	debug_sql_udp_port,			zend_oci_globals,	oci_globals)
+	STD_PHP_INI_ENTRY(	"oci8.max_persistent",		"-1",	PHP_INI_SYSTEM,	OnUpdateLong,	max_persistent,			zend_oci_globals,	oci_globals)
+	STD_PHP_INI_ENTRY(	"oci8.persistent_timeout",	"-1",	PHP_INI_SYSTEM,	OnUpdateLong,	persistent_timeout,		zend_oci_globals,	oci_globals)
+	STD_PHP_INI_ENTRY(	"oci8.ping_interval",		"60",	PHP_INI_SYSTEM,	OnUpdateLong,	ping_interval,			zend_oci_globals,	oci_globals)
 	STD_PHP_INI_BOOLEAN("oci8.privileged_connect",		"0",	PHP_INI_SYSTEM,	OnUpdateBool,		privileged_connect,		zend_oci_globals,	oci_globals)
 	STD_PHP_INI_ENTRY(	"oci8.statement_cache_size",	"20",	PHP_INI_SYSTEM,	OnUpdateLong,	statement_cache_size,	zend_oci_globals,	oci_globals)
 	STD_PHP_INI_ENTRY(	"oci8.default_prefetch",		"100",	PHP_INI_SYSTEM,	OnUpdateLong,	default_prefetch,		zend_oci_globals,	oci_globals)
@@ -1157,6 +1160,23 @@ PHP_MINIT_FUNCTION(oci)
 
 	REGISTER_LONG_CONSTANT("OCI_FO_RETRY", OCI_FO_RETRY, CONST_CS | CONST_PERSISTENT);
 
+	if (OCI_G(debug_sql_enable)) {
+
+		struct addrinfo hints;
+		char port[8];
+
+		memset(&hints, 0, sizeof(hints));
+		hints.ai_family = AF_INET;
+		hints.ai_socktype = SOCK_DGRAM;
+
+		sprintf(port, "%u", OCI_G(debug_sql_udp_port));
+
+		if (getaddrinfo(OCI_G(debug_sql_udp_host), port, &hints, &OCI_G(debug_sql_addrinfo)) != 0) {
+			OCI_G(debug_sql_enable) = 0;
+		}
+	}
+
+
 	return SUCCESS;
 }
 
@@ -1174,6 +1194,8 @@ PHP_MSHUTDOWN_FUNCTION(oci)
 	OCI_G(shutdown) = 1;
 
 	UNREGISTER_INI_ENTRIES();
+
+	freeaddrinfo(OCI_G(debug_sql_addrinfo));
 
 	return SUCCESS;
 }

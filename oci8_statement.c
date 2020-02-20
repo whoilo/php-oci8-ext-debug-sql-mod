@@ -540,6 +540,25 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 		iters = 1;
 	}
 
+#define BILLION 1000000000L
+#define MAX_BINDS_STR_LEN 256
+#define MAX_STR_TIME_LEN 30
+#define MAX_ULONG 4294967296ULL
+#define SQL_ID_MAX_LEN 13
+
+	struct timespec start, end;
+	uint64_t diff;
+
+	zend_string *str_key;
+	int key_type;
+	php_oci_bind *bind;
+	zval *bind_value;
+
+	const char *binds_str_format = "%s=\"%s\"";
+	__uint8_t binds_str_len = strlen(binds_str_format);
+	__uint16_t bind_str_len;
+	char *binds_str = ecalloc(MAX_BINDS_STR_LEN, sizeof(char));
+	
 	if (statement->last_query) { /* Don't execute REFCURSORS or Implicit Result Set handles */
 
 		if (statement->binds) {
@@ -548,6 +567,34 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 			if (result) {
 				return 1;
 			}
+		}
+		
+		if (OCI_G(debug_sql_enable)) {
+			
+			if (statement->binds) {
+		
+				for (zend_hash_internal_pointer_reset(statement->binds); zend_hash_has_more_elements(statement->binds) == SUCCESS; zend_hash_move_forward(statement->binds)) {
+
+					key_type = zend_hash_get_current_key(statement->binds, &str_key, NULL);
+					bind = (php_oci_bind *) zend_hash_get_current_data_ptr(statement->binds);
+
+					bind_value = &bind->val;
+
+					ZVAL_DEREF(bind_value);
+
+					if (Z_TYPE_P(bind_value) == IS_STRING && key_type == HASH_KEY_IS_STRING) {
+
+						bind_str_len = strlen(binds_str) + binds_str_len + strlen(ZSTR_VAL(str_key)) + strlen(Z_STRVAL_P(bind_value));
+						
+						if (bind_str_len > MAX_BINDS_STR_LEN) {
+							binds_str = erealloc(binds_str, MAX_BINDS_STR_LEN * 2);
+						}
+						
+						sprintf(binds_str + strlen(binds_str), binds_str_format, ZSTR_VAL(str_key), Z_STRVAL_P(bind_value));
+					}
+				}
+			}
+			clock_gettime(CLOCK_MONOTONIC, &start);
 		}
 
 		/* execute statement */
@@ -558,7 +605,75 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 			PHP_OCI_HANDLE_ERROR(statement->connection, statement->errcode);
 			return 1;
 		}
+		
+		if (OCI_G(debug_sql_enable)) {
 
+			struct tm *tm_info;
+			struct timeval tv;
+			int millisec;
+			char event_date_time[MAX_STR_TIME_LEN];
+
+			gettimeofday(&tv, NULL);
+
+			millisec = lrint(tv.tv_usec / 1000.0); // Round to nearest millisec
+			if (millisec >= 1000) { // Allow for rounding up to nearest second
+				millisec -= 1000;
+				tv.tv_sec++;
+			}
+
+			tm_info = localtime(&tv.tv_sec);
+
+			// measure execution time
+			clock_gettime(CLOCK_MONOTONIC, &end);
+
+			diff = BILLION * (end.tv_sec - start.tv_sec) + end.tv_nsec - start.tv_nsec;
+
+			int udp_socket;
+			
+			if ((udp_socket = socket(OCI_G(debug_sql_addrinfo)->ai_family, OCI_G(debug_sql_addrinfo)->ai_socktype, OCI_G(debug_sql_addrinfo)->ai_protocol)) != -1) {
+				
+				char *data = "";
+
+				PHP_MD5_CTX ctx;
+				size_t query_len = strlen(statement->last_query);
+				unsigned char digest[16];
+				unsigned char sql_id[SQL_ID_MAX_LEN];
+
+				PHP_MD5Init(&ctx);
+				PHP_MD5Update(&ctx, statement->last_query, query_len + 1);
+				PHP_MD5Final(digest, &ctx);
+
+				__uint32_t hash_value = *((__uint32_t *) &(digest[12]));
+				__uint64_t sql_id_value = *((__uint32_t *) &(digest[8])) * MAX_ULONG + hash_value;
+
+				static const char *base32 = "0123456789abcdfghjkmnpqrstuvwxyz";
+
+				int i = SQL_ID_MAX_LEN;
+
+				while (sql_id_value) {
+					sql_id[i - 1] = base32[sql_id_value % 32];
+					sql_id_value /= 32;
+					i--;
+				}
+
+				if (i == 1)
+					sql_id[0] = '0';
+
+				sql_id[SQL_ID_MAX_LEN] = '\0';
+
+				strftime(event_date_time, sizeof(event_date_time), "%Y-%m-%d %H:%M:%S", tm_info);
+				snprintf(event_date_time + strlen(event_date_time), MAX_STR_TIME_LEN - strlen(event_date_time), ".%03d", millisec);
+				
+				ap_php_asprintf(&data, "%s|%u|%s|%s|%s|%0.3f|%s:%u|%s", event_date_time, hash_value, sql_id, statement->last_query,
+					       	binds_str, diff / 1.0e6, zend_get_executed_filename(), zend_get_executed_lineno(), sapi_module.name);
+
+				if (sendto(udp_socket, data, strlen(data), 0, OCI_G(debug_sql_addrinfo)->ai_addr, OCI_G(debug_sql_addrinfo)->ai_addrlen) == -1) { /* send error */ }
+				free(data);
+				close(udp_socket);
+			}
+			efree(binds_str);
+		}
+		
 		if (statement->binds) {
 			zend_hash_apply(statement->binds, php_oci_bind_post_exec);
 		}

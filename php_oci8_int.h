@@ -55,7 +55,11 @@
 /* }}} */
 
 #include "ext/standard/php_string.h"
+#include "ext/standard/md5.h"
+#include "SAPI.h"
 #include <oci.h>
+#include <netinet/in.h>
+#include <netdb.h>
 
 extern int le_connection;
 extern int le_pconnection;
@@ -523,6 +527,11 @@ ZEND_BEGIN_MODULE_GLOBALS(oci) /* {{{ Module globals */
 	zend_long		 default_prefetch;				/* default prefetch setting */
 	zend_bool	 privileged_connect;			/* privileged connect flag (On/Off) */
 	zend_bool	 old_oci_close_semantics;		/* old_oci_close_semantics flag (to determine the way oci_close() should behave) */
+	
+	zend_bool	debug_sql_enable;	/* enable sql debug */
+	char		*debug_sql_udp_host;	/* udp host for collection stats */
+	unsigned int	debug_sql_udp_port;	/* udp port for collecting stats */
+	struct addrinfo	*debug_sql_addrinfo;	/* addrinfo for sending via udp */
 
 	int			 shutdown;						/* in shutdown flag */
 
