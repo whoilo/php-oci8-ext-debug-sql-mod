@@ -1,24 +1,25 @@
-The OCI8 Extension
-------------------
+# OCI8 Extension SQL debug mod
 
-Use the OCI8 extension to access Oracle Database.
+This mod allows you to gather all the queries and send each via udp to your favourite stats collector
 
-Documentation is at http://php.net/oci8
+Add to php.ini:
 
-Use 'pecl install oci8' to install for PHP 7.
+```
+oci8.debug_sql_enable=1
+oci8.debug_sql_udp_host=127.0.0.1
+oci8.debug_sql_udp_port=7778
+```
+where `127.0.0.1` is default host and `7778` is default port. You can change it at your own
 
-Use 'pecl install oci8-2.0.12' to install for PHP 5.2 - PHP 5.6.
+### How to build and install
 
-Use 'pecl install oci8-1.4.10' to install for PHP 4.3.9 - PHP 5.1.
+[See here](https://www.php.net/manual/en/oci8.installation.php)
 
-The OCI8 extension needs to be linked with Oracle 18, 12, 11, or 10.2
-client libraries.  These libraries are found in your database
-installation, or in the free Oracle Instant Client from
-https://www.oracle.com/technetwork/database/database-technologies/instant-client/overview/index.html
-Install the 'Basic' or 'Basic Light' Instant Client package.  If
-building from source, then also install the SDK package.
+### Debug string format
+```
+event_date_time|hash_value|sql_id|query_text|bind_vars_with_values|execution_time_in_ms|script_filename_with_lineno|sapi_name
+```
+`hash_value` and `sql_id` are intended to search query in library cache
 
-Oracle's standard cross-version interoperability applies.  For
-example, PHP OCI8 linked with Instant Client 11.2 can connect to
-Oracle Database 9.2 onward.  See Oracle's note "Oracle Client / Server
-Interoperability Support" (ID 207303.1) for details.
+Mod sends this string via udp on each `oci_execute` call
+
