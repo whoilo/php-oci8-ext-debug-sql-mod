@@ -541,7 +541,7 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 	}
 
 #define BILLION 1000000000L
-#define MAX_BINDS_STR_LEN 256
+#define MAX_BIND_STR_LEN 256
 #define MAX_STR_TIME_LEN 30
 #define MAX_ULONG 4294967296ULL
 #define SQL_ID_MAX_LEN 13
@@ -554,10 +554,11 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 	php_oci_bind *bind;
 	zval *bind_value;
 
-	const char *binds_str_format = "%s=\"%s\"";
-	__uint8_t binds_str_len = strlen(binds_str_format);
-	__uint16_t bind_str_len;
-	char *binds_str = ecalloc(MAX_BINDS_STR_LEN, sizeof(char));
+	const char *bind_str_format = "%s=\"%s\"";
+	__uint8_t bind_str_format_len = 3;
+	__uint16_t bind_str_len = 0, cur_alloc_size = 0;
+	char *binds_str = ecalloc(MAX_BIND_STR_LEN, sizeof(char));
+	cur_alloc_size = MAX_BIND_STR_LEN;
 	
 	if (statement->last_query) { /* Don't execute REFCURSORS or Implicit Result Set handles */
 
@@ -584,13 +585,14 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 
 					if (Z_TYPE_P(bind_value) == IS_STRING && key_type == HASH_KEY_IS_STRING) {
 
-						bind_str_len = strlen(binds_str) + binds_str_len + strlen(ZSTR_VAL(str_key)) + strlen(Z_STRVAL_P(bind_value));
+						bind_str_len = bind_str_format_len + strlen(ZSTR_VAL(str_key)) + strlen(Z_STRVAL_P(bind_value));
 						
-						if (bind_str_len > MAX_BINDS_STR_LEN) {
-							binds_str = erealloc(binds_str, MAX_BINDS_STR_LEN * 2);
+						if (bind_str_len > MAX_BIND_STR_LEN || bind_str_len + strlen(binds_str) > cur_alloc_size) {
+							cur_alloc_size = cur_alloc_size + bind_str_len + MAX_BIND_STR_LEN;
+							binds_str = erealloc(binds_str, cur_alloc_size);
 						}
 						
-						sprintf(binds_str + strlen(binds_str), binds_str_format, ZSTR_VAL(str_key), Z_STRVAL_P(bind_value));
+						sprintf(binds_str + strlen(binds_str), bind_str_format, ZSTR_VAL(str_key), Z_STRVAL_P(bind_value));
 					}
 				}
 			}
