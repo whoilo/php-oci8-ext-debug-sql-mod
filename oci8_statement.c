@@ -559,6 +559,7 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 	__uint16_t bind_str_len = 0, cur_alloc_size = 0;
 	char *binds_str = ecalloc(MAX_BIND_STR_LEN, sizeof(char));
 	cur_alloc_size = MAX_BIND_STR_LEN;
+	char *bind_str_value = ecalloc(MAX_BIND_STR_LEN, sizeof(char));
 	
 	if (statement->last_query) { /* Don't execute REFCURSORS or Implicit Result Set handles */
 
@@ -583,16 +584,29 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 
 					ZVAL_DEREF(bind_value);
 
-					if (Z_TYPE_P(bind_value) == IS_STRING && key_type == HASH_KEY_IS_STRING) {
+					if (key_type == HASH_KEY_IS_STRING) {
+					    switch(Z_TYPE_P(bind_value)) {
+					        case IS_STRING:
+                                bind_str_len = strlen(Z_STRVAL_P(bind_value));
+                                if (bind_str_len > MAX_BIND_STR_LEN) {
+                                    bind_str_value = erealloc(bind_str_value, bind_str_len);
+                                }
+                                sprintf(bind_str_value, "%s", Z_STRVAL_P(bind_value));
+					            break;
+					        case IS_LONG:
+                                sprintf(bind_str_value, "%ld", Z_LVAL_P(bind_value));
+                                bind_str_len = strlen(bind_str_value);
+					            break;
+					    }
 
-						bind_str_len = bind_str_format_len + strlen(ZSTR_VAL(str_key)) + strlen(Z_STRVAL_P(bind_value));
+						bind_str_len = bind_str_format_len + strlen(ZSTR_VAL(str_key)) + bind_str_len;
 						
 						if (bind_str_len > MAX_BIND_STR_LEN || bind_str_len + strlen(binds_str) > cur_alloc_size) {
 							cur_alloc_size = cur_alloc_size + bind_str_len + MAX_BIND_STR_LEN;
 							binds_str = erealloc(binds_str, cur_alloc_size);
 						}
 						
-						sprintf(binds_str + strlen(binds_str), bind_str_format, ZSTR_VAL(str_key), Z_STRVAL_P(bind_value));
+						sprintf(binds_str + strlen(binds_str), bind_str_format, ZSTR_VAL(str_key), bind_str_value);
 					}
 				}
 			}
@@ -674,6 +688,7 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 				close(udp_socket);
 			}
 			efree(binds_str);
+			efree(bind_str_value);
 		}
 		
 		if (statement->binds) {
