@@ -599,7 +599,7 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 								break;
 						}
 
-						bind_str_len = bind_str_format_len + strlen(ZSTR_VAL(str_key)) + bind_str_len;
+						bind_str_len = bind_str_format_len + ZSTR_LEN(str_key) + bind_str_len;
 						
 						if (bind_str_len > MAX_BIND_STR_LEN || bind_str_len + strlen(binds_str) > cur_alloc_size) {
 							cur_alloc_size = cur_alloc_size + bind_str_len + MAX_BIND_STR_LEN;
