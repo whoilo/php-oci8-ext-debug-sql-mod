@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.16)
 project(oci8_mod C)
 
-set(PHP_SOURCE "/home/ilya/php-7.4.14")
+set(PHP_SOURCE "/home/ilya/php-7.4.14-debug")
 set(CMAKE_C_STANDARD 99)
 add_compile_definitions(HAVE_CONFIG_H)
 

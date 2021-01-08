@@ -587,7 +587,7 @@ int php_oci_statement_execute(php_oci_statement *statement, ub4 mode)
 					if (key_type == HASH_KEY_IS_STRING) {
 						switch (Z_TYPE_P(bind_value)) {
 							case IS_STRING:
-								bind_str_len = strlen(Z_STRVAL_P(bind_value));
+								bind_str_len = Z_STRLEN_P(bind_value);
 								if (bind_str_len > MAX_BIND_STR_LEN) {
 									bind_str_value = erealloc(bind_str_value, bind_str_len);
 								}
